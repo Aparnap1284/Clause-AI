@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 import pdf from "pdf-parse";
 
 export const runtime = "nodejs";
 
 export async function POST(req) {
   try {
+    // Read uploaded file
     const formData = await req.formData();
     const file = formData.get("file");
 
@@ -12,16 +14,53 @@ export async function POST(req) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Extract text from PDF
     const data = await pdf(buffer);
+    const textContent = data.text;
 
-    // Example: extract text and return (you can replace this with your AI analysis)
-    const text = data.text;
+    if (!textContent.trim()) {
+      return NextResponse.json(
+        { error: "Could not extract text from PDF" },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({ text });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Failed to parse PDF", details: err.message }, { status: 500 });
+    // Initialize Google GenAI client
+    const client = new GoogleGenAI({
+      apiKey: process.env.GOOGLE_API_KEY
+    });
+
+    // Prepare prompt for AI
+    const prompt = `
+You are ClauseAI, a professional legal AI assistant.
+Analyze the following legal document text. Extract key clauses, risks, and summarize clearly:
+
+"${textContent}"
+    `;
+
+    // Generate content using the correct method for the latest SDK
+    const response = await client.models.generateContent({
+      model: "gemini-2.5-flash", // Use a valid Gemini model
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
+        }
+      ]
+    });
+
+    // Extract the generated text
+    const output = response?.results?.[0]?.content?.[0]?.text || "No output generated";
+
+    return NextResponse.json({ result: output });
+
+  } catch (error) {
+    console.error("PDF Analyze Error:", error);
+    return NextResponse.json(
+      { error: "Failed to process PDF", details: error.message },
+      { status: 500 }
+    );
   }
 }
