@@ -5,8 +5,6 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 export async function POST(req) {
   try {
-    console.log("Chat endpoint hit");
-    
     const { message } = await req.json();
 
     if (!message) {
@@ -17,50 +15,58 @@ export async function POST(req) {
     let model;
     try {
       model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    } catch (modelError) {
-      console.log("Trying gemini-pro instead");
+    } catch {
       model = genAI.getGenerativeModel({ model: "gemini-pro" });
     }
 
     const prompt = `
-You are ClauseAI, a helpful AI legal assistant. Provide clear, professional responses to legal questions.
+IMPORTANT: You are ClauseAI, a legal document assistant. The user has uploaded a document but you CANNOT access its content. 
+You MUST provide general legal advice without referencing specific document content.
 
-User: ${message}
-ClauseAI: 
+USER QUESTION: ${message}
+
+RESPONSE REQUIREMENTS:
+1. Provide helpful legal information based on standard legal practices
+2. Do NOT ask for document content - you don't have access to it
+3. Focus on general legal principles and common scenarios
+4. Be specific and provide actionable advice
+5. Mention when professional legal counsel should be consulted
+
+If the question is about a specific clause type, explain:
+- What that clause typically contains
+- Why it's important
+- Common issues to watch for
+- Negotiation points
+
+Provide practical, useful legal guidance.
     `;
 
-    try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const output = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const output = response.text();
 
-      return NextResponse.json({ reply: output });
-    } catch (apiError) {
-      console.error("API error, using fallback response:", apiError);
-      
-      // Fallback responses based on common questions
-      const lowerMessage = message.toLowerCase();
-      let fallbackResponse = "";
-      
-      if (lowerMessage.includes("hello") || lowerMessage.includes("hi") || lowerMessage.includes("hey")) {
-        fallbackResponse = "Hello! I'm ClauseAI, your legal document assistant. How can I help you today?";
-      } else if (lowerMessage.includes("risk") || lowerMessage.includes("danger") || lowerMessage.includes("problem")) {
-        fallbackResponse = "Based on my analysis, I've identified several areas that may need attention. Could you be more specific about which clause you're concerned about?";
-      } else if (lowerMessage.includes("contract") || lowerMessage.includes("agreement") || lowerMessage.includes("document")) {
-        fallbackResponse = "I've analyzed your document and can provide insights on key clauses, risks, and recommendations. What would you like to know specifically?";
-      } else {
-        fallbackResponse = "I'm here to help you understand your legal documents. You can ask me about specific clauses, risks, or recommendations based on the document analysis.";
-      }
-      
-      return NextResponse.json({ reply: fallbackResponse });
-    }
+    return NextResponse.json({ reply: output });
     
   } catch (error) {
     console.error("Chat error:", error);
     
-    // Final fallback response
-    return NextResponse.json({ 
-      reply: "I'm ClauseAI, your legal document assistant. I can help you understand legal documents, identify risks, and provide recommendations. Please try asking me about your uploaded document." 
-    });
+    // Context-aware fallback responses
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('risk') || lowerMessage.includes('danger')) {
+      return NextResponse.json({ 
+        reply: "Common risky clauses in legal documents include: 1) Vague termination terms, 2) One-sided liability provisions, 3) Unclear payment terms, 4) Overly broad confidentiality clauses, and 5) Unfair dispute resolution clauses. I can explain any of these in detail if helpful." 
+      });
+    } 
+    else if (lowerMessage.includes('summary') || lowerMessage.includes('overview')) {
+      return NextResponse.json({ 
+        reply: "When reviewing legal documents, focus on: identifying all parties and their obligations, understanding payment terms, noting termination conditions, checking liability limitations, and reviewing dispute resolution methods. Would you like me to elaborate on any specific area?" 
+      });
+    }
+    else {
+      return NextResponse.json({ 
+        reply: "I'm ClauseAI, your legal document assistant. I can help explain legal terms, identify common risk areas, and provide guidance on document review. What specific aspect of legal documents would you like to discuss?" 
+      });
+    }
   }
 }
